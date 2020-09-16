@@ -21,23 +21,54 @@ library(censusapi)
 sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
 ```
 
+```{r elec. & gas use}
+years <- 2017:2020
+quarters <- 1:4
+pge_17_to_20_gas_and_elec <- NULL
 
-## R Markdown
+for (i in 1:14) {
+  for (year in years) {
+    for (quarter in quarters) {
+      filename <- 
+        paste0(
+          "PGE_",
+          year,
+          "_Q",
+          quarter,
+          "_",
+          "Electric",
+          "UsageByZip.csv"
+        )
+      print(filename)
+      temp_file <- read_csv(filename)
+      pge_17_to_20_gas_and_elec <- rbind(pge_17_to_20_gas_and_elec, temp_file)
+      saveRDS(pge_17_to_20_gas_and_elec, "pge_17_to_20_gas_and_elec.rds")
+    }
+  }
+}
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+for (i in 1:14) {
+  for (year in years) {
+    for (quarter in quarters) {
+      filename <- 
+        paste0(
+          "PGE_",
+          year,
+          "_Q",
+          quarter,
+          "_",
+          "Gas",
+          "UsageByZip.csv"
+        )
+      print(filename)
+      temp_file <- read_csv(filename)
+      pge_17_to_20_gas_and_elec <- rbind(pge_17_to_20_gas_and_elec, temp_file)
+      saveRDS(pge_17_to_20_gas_and_elec, "pge_17_to_20_gas_and_elec.rds")
+    }
+  }
+}
 
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
