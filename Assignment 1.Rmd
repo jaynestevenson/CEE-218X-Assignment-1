@@ -18,57 +18,107 @@ library(tigris)
 library(leaflet)
 library(censusapi)
 
-sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
 ```
 
-```{r elec. & gas use}
+```{r read files}
 years <- 2017:2020
 quarters <- 1:4
-pge_17_to_20_gas_and_elec <- NULL
+types <- c("Electric","Gas")
+pge_17_to_20_elec_and_gas <- NULL
 
-for (i in 1:14) {
-  for (year in years) {
+for (year in years) {
+  if (year == 2020) {
+    quarters <- 1:2
+  }
     for (quarter in quarters) {
-      filename <- 
-        paste0(
-          "PGE_",
-          year,
-          "_Q",
-          quarter,
-          "_",
-          "Electric",
-          "UsageByZip.csv"
+      for (type in types) {
+        filename <-
+          paste0(
+            "PGE_",
+            year,
+            "_Q",
+            quarter,
+            "_",
+            type,
+            "UsageByZip.csv"
         )
-      print(filename)
-      temp_file <- read_csv(filename)
-      pge_17_to_20_gas_and_elec <- rbind(pge_17_to_20_gas_and_elec, temp_file)
-      saveRDS(pge_17_to_20_gas_and_elec, "pge_17_to_20_gas_and_elec.rds")
+        print(filename)
+        temp <- read_csv(filename)
+        pge_17_to_20_elec_and_gas <- bind_rows(pge_17_to_20_elec_and_gas, temp)
+        saveRDS(pge_17_to_20_elec_and_gas, "pge_17_to_20_elec_and_gas.rds")
     }
   }
 }
-
-
-for (i in 1:14) {
-  for (year in years) {
-    for (quarter in quarters) {
-      filename <- 
-        paste0(
-          "PGE_",
-          year,
-          "_Q",
-          quarter,
-          "_",
-          "Gas",
-          "UsageByZip.csv"
-        )
-      print(filename)
-      temp_file <- read_csv(filename)
-      pge_17_to_20_gas_and_elec <- rbind(pge_17_to_20_gas_and_elec, temp_file)
-      saveRDS(pge_17_to_20_gas_and_elec, "pge_17_to_20_gas_and_elec.rds")
-    }
-  }
-}
-
 ```
 
+
+```{r bay area zips}
+ca_counties <- counties("CA", cb=T, progress_bar = F)
+
+bay_county_names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Fransisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+bay_counties <-
+  ca_counties %>%
+  filter(NAME %in% bay_county_names)
+
+usa_zips <-
+  zctas(cb = T, progress_bar = F)
+
+bay_zips <-
+  usa_zips %>%
+  st_centroid() %>%
+  .[bay_counties, ] %>%
+  st_set_geometry(NULL) %>%
+  left_join(usa_zips %>% select(GEOID10)) %>%
+  st_as_sf()
+```
+
+```{r }
+pge_final <-
+  pge_17_to_20_elec_and_gas %>%
+  filter(CUSTOMERCLASS %in% 
+           c(
+             "Elec-Residential",
+             "Elec-Commercial",
+             "Gas-Residential",
+             "Gas-Commercial"
+           ),
+        ZIPCODE %in% bay_zips$ZCTA5CE10) %>%
+ group_by(YEAR, MONTH) %>%
+ summarize(
+    MONTHLYKWH =
+      sum(
+        TOTALKWH,
+        na.rm = T
+      ),
+    MONTHLYTHM =
+      sum(
+        TOTALTHM,
+        na.rm = T
+      )
+  ) %>%
+  mutate(
+    MONTHLYKBTU =
+      MONTHLYKWH * 3.412,
+      MONTHLYTHM * 999.76,
+    na.rm = T
+  ) %>%
+  mutate(
+    MONTHLYKBTU =
+      MONTHLYTHM * 999.76,
+    na.rm = T
+  )
+```
 
