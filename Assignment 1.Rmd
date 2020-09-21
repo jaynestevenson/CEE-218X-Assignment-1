@@ -17,6 +17,7 @@ library(sf)
 library(tigris)
 library(leaflet)
 library(censusapi)
+library(zoo)
 
 Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
 ```
@@ -90,35 +91,36 @@ pge_final <-
   pge_17_to_20_elec_and_gas %>%
   filter(CUSTOMERCLASS %in% 
            c(
-             "Elec-Residential",
-             "Elec-Commercial",
-             "Gas-Residential",
-             "Gas-Commercial"
+             "Elec- Residential",
+             "Elec- Commercial",
+             "Gas- Residential",
+             "Gas- Commercial"
            ),
         ZIPCODE %in% bay_zips$ZCTA5CE10) %>%
- group_by(YEAR, MONTH) %>%
- summarize(
-    MONTHLYKWH =
+  mutate(
+    TOTALKBTU = case_when(
+      !is.na(TOTALKWH) ~ TOTALKWH * 3.412,
+      !is.na(TOTALTHM) ~ TOTALTHM * 999.76
+    )
+  ) %>%
+  group_by(YEAR, MONTH, CUSTOMERCLASS) %>%
+  summarize(
+    MONTHLYKBTU = 
       sum(
-        TOTALKWH,
-        na.rm = T
-      ),
-    MONTHLYTHM =
-      sum(
-        TOTALTHM,
+        TOTALKBTU,
         na.rm = T
       )
   ) %>%
-  mutate(
-    MONTHLYKBTU =
-      MONTHLYKWH * 3.412,
-      MONTHLYTHM * 999.76,
-    na.rm = T
-  ) %>%
-  mutate(
-    MONTHLYKBTU =
-      MONTHLYTHM * 999.76,
-    na.rm = T
-  )
+ mutate(Date = as.yearmon(paste(YEAR, MONTH, sep = "-")))
+```
+
+```{r}
+ggplot(data = pge_final) +
+geom_bar(mapping = aes(x= Date, y= MONTHLYKBTU, fill = CUSTOMERCLASS), stat = "identity", position = "stack") +
+labs(
+  y = "Monthly kBTU",
+  title = "PG&E Bay Area Monthly Electricity and Gas Usage, 2017-2020",
+  fill = "Electricity Type"
+)
 ```
 
