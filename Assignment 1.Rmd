@@ -86,7 +86,7 @@ bay_zips <-
   st_as_sf()
 ```
 
-```{r }
+```{r pge data manipulation}
 pge_final <-
   pge_17_to_20_elec_and_gas %>%
   filter(CUSTOMERCLASS %in% 
@@ -114,13 +114,201 @@ pge_final <-
  mutate(Date = as.yearmon(paste(YEAR, MONTH, sep = "-")))
 ```
 
-```{r}
-ggplot(data = pge_final) +
-geom_bar(mapping = aes(x= Date, y= MONTHLYKBTU, fill = CUSTOMERCLASS), stat = "identity", position = "stack") +
-labs(
-  y = "Monthly kBTU",
-  title = "PG&E Bay Area Monthly Electricity and Gas Usage, 2017-2020",
-  fill = "Electricity Type"
-)
+```{r interactive bar chart}
+pge_chart <-
+  pge_final %>%
+  ggplot() +
+  geom_bar(
+    mapping = aes(
+      x= Date, 
+      y= MONTHLYKBTU, 
+      fill = CUSTOMERCLASS), 
+      stat = "identity", 
+      position = "stack") +
+  labs(
+    y = "Monthly kBTU",
+    title = "PG&E Bay Area Monthly Electricity and Gas Usage, 2017-2020",
+    fill = "Electricity Type"
+  ) 
+
+  pge_chart %>% ggplotly()
+
+# Based on the displayed chart, there are some observable changes in energy 
+# consumption that may be attributable to the COVID-19 pandemic. Comparing 2019
+# consumption from April-June to 2020 consumption from April-June, the most obvious 
+# difference is the higher use of residential gas in April 2020 compared to April 2019.
+# This fairly observable difference could potentially be due to the fact that April was the 
+# first full month on California's stay-at-home order, and so it's possible that was the month when
+# the largest number of people were home. However, we don't see as large of difference  
+# with regard residential electricity use. Other observable trends include: lower 
+# commercial gas use from May-June 2020 than from May-June 2019, higher residential 
+# electricity use from April-June 2020 than April-June 2019, and lower commercial
+# electricity use from May-June 2020 than May-June 2019.
 ```
 
+
+```{r % change res elec COVID}
+pge_res_elec_covid <-
+  pge_17_to_20_elec_and_gas %>%
+      filter(YEAR %in% (2019:2020), MONTH %in% (4:6), 
+      CUSTOMERCLASS == "Elec- Residential") %>%
+      mutate(
+        ZIPCODE = ZIPCODE %>% as.character()
+      ) %>%
+      group_by(ZIPCODE, YEAR) %>%
+      summarize(
+       TOTALKWH = 
+         sum(TOTALKWH, na.rm = T)) %>%
+       pivot_wider(
+         names_from = YEAR,
+         values_from = TOTALKWH
+       ) %>%
+     rename(
+       KWH2019 = "2019", KWH2020 = "2020"
+     ) %>%
+     mutate(
+     percent_change = 
+       ((KWH2020 - KWH2019)/KWH2019) * 100
+     ) %>%
+     right_join(
+     bay_zips %>% select(GEOID10),
+     by = c("ZIPCODE" = "GEOID10")
+     ) %>% 
+     subset(KWH2019 != 0) %>%
+     subset(KWH2020 != 0) %>%
+     drop_na() %>%
+     st_as_sf() %>% 
+     st_transform(4326)
+```
+
+
+```{r % change comm elec COVID}
+pge_comm_elec_covid <-
+  pge_17_to_20_elec_and_gas %>%
+      filter(YEAR %in% (2019:2020), MONTH %in% (4:6), 
+      CUSTOMERCLASS == "Elec- Commercial") %>%
+      mutate(
+        ZIPCODE = ZIPCODE %>% as.character()
+      ) %>%
+     group_by(ZIPCODE, YEAR) %>%
+     summarize(
+       TOTALKWH = 
+        sum(TOTALKWH, na.rm = T)
+     ) %>%
+    pivot_wider(
+       names_from = YEAR,
+       values_from = TOTALKWH
+     ) %>%
+    rename(
+      KWH2019 = "2019", KWH2020 = "2020"
+    ) %>%
+    mutate(
+    percent_change = 
+      ((KWH2020 - KWH2019)/KWH2019) * 100
+    ) %>%
+    right_join(
+    bay_zips %>% select(GEOID10),
+    by = c("ZIPCODE" = "GEOID10")
+    ) %>% 
+    subset(KWH2019 != 0) %>%
+    subset(KWH2020 != 0) %>%
+    drop_na() %>%
+    st_as_sf() %>% 
+    st_transform(4326)
+```
+
+```{r mapping res elec}
+res_pal <- colorNumeric(
+  palette = "Greens",
+  domain = 
+    pge_res_elec_covid$percent_change
+)
+
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(
+    data = pge_res_elec_covid,
+    fillColor = ~res_pal(percent_change),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 1.2,
+    weight = 1,
+    label = ~paste0(
+      round(percent_change), 
+      " percent change in ",
+      ZIPCODE
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>%
+   addLegend(
+    data = pge_res_elec_covid,
+    pal = res_pal,
+    values = ~percent_change,
+    title = "Percent Change in <br> April-June Residential <br> kWH, 2019-2020"
+  ) 
+
+# For this map, I chose to represent "before" COVID as cumulative electricity use
+# from April-June of 2019, and "after" COVID began as cumulative electricity use from 
+# April-June of 2020. I chose to compare 2019 to 2020 because I believe 
+# 2019 data would provide the most relevant and updated information on energy use 
+# in the Bay Area as a baseline year. I chose the months April-June because 
+# April was the first full month of California's shelter-in-place, and because 
+# June is the most recent available month for 2020 data. While the effects of 
+# COVID on energy consumption vary by neighborhood, with some zipcodes experiencing 
+# a 20% + increase in energy use and others actually experiencing a decrease in
+# energy use (represented by a negative percent change), the majority of zipcodes 
+# have experienced an increase in residential electricity use to some degree
+# since COVID began.
+```
+
+```{r mapping comm elec}
+res_pal <- colorNumeric(
+  palette = "Purples",
+  domain = 
+    pge_comm_elec_covid$percent_change
+)
+
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(
+    data = pge_comm_elec_covid,
+    fillColor = ~res_pal(percent_change),
+    color = "white",
+    opacity = 0.7,
+    fillOpacity = 2,
+    weight = 1,
+    label = ~paste0(
+      round(percent_change), 
+      " percent change in ",
+      ZIPCODE
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>%
+   addLegend(
+    data = pge_comm_elec_covid,
+    pal = res_pal,
+    values = ~percent_change,
+    title = "Percent Change in <br> April-June Commercial <br> kWH, 2019-2020"
+  ) 
+
+
+# My choice in defining "before" COVID and "after" COVID began follow the same
+# thought process as above. Similar to the percentage change in residential 
+# energy use, the change in commercial energy use also varies by neighborhood.
+# However, as is clear by the map, the overwhelming majority of zipcodes have 
+# experienced a decrease in commercial electricity use, some even as large as 
+# an 84% decrease. There are a few zipcodes represented by dark purple that 
+# indicate a large increase in commercial energy use. It's difficult to know why 
+# that is the case, but it's possible that those neighborhoods contain 
+# buildings that have become even more utilized during the pandemic, like 
+# medical facilities. 
+```
+
+
+```
